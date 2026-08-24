@@ -1,0 +1,459 @@
+import ij.IJ; //Import this so that we can use imageJ to open the image
+import ij.gui.GenericDialog; //Import so we can create dialog boxes
+import ij.gui.WaitForUserDialog; //Import to allow us to wait for user input
+import ij.gui.NonBlockingGenericDialog; //Import to allow us to create non blocking dialogs
+import ij.ImagePlus; //Import to allow us to create or alter images
+import ij.WindowManager; //Import to allow us to manager windows
+import ij.measure; //Import so we can measure things
+import ij.plugin.Duplicator; //Import so we can create substacks using the duplicator
+import ij.process.ImageProcessor; //Import so we can invert the LUT after thresholding
+
+//This is basically declaring a function
+//Argsin are the directory to search, the substring to search for, and an arraylist declared outside the function to fill with matching locations
+public static listFilesAndFilesSubDirectories(String directoryName, String substring, ArrayList fileLocations) {
+
+	//Here we declare our folder as a file variable for our directory and create a file array of the files within folder
+	File folder = new File(directoryName);
+	File [] listOfFiles = folder.listFiles();
+	
+	//Loop through the files in the file list
+	for (File file:listOfFiles) {
+		//If the file we're checking is a file and not a directory
+		if (file.isFile()) {
+			//And if it contains the substring we're interested in within its full path
+			if(file.getAbsolutePath().contains(substring)) {
+				//We store the full path in the output ArrayList;
+				String stringForm = file.getAbsolutePath();
+				File fileForm = new File(stringForm);
+				fileLocations.add(fileForm);
+				//imp=IJ.openImage(file.getAbsolutePath);
+				//imp.show();
+			}
+		//If the file we're checking is a directory, then we run the whole thing on that directory
+		} else if (file.isDirectory()) {
+			listFilesAndFilesSubDirectories(file.getAbsolutePath(), substring, fileLocations);           
+		}
+	}
+
+	//Here we convert out ArrayList to a string array and return it
+	File[] arrayForm = fileLocations.toArray(new File[0]);
+	//String [] test = new String[fileLocations.size()];
+	//test=fileLocations.toArray(test);
+	//System.out.println(fileLocations.size());
+	//System.out.println(test.length);
+	//String [] test = fileLocations.toArray(new String[fileLocations.size()]);
+	return arrayForm;
+}
+
+//This asks the user if they wish to remove ROIs from the image, and outputs the area of ROI removed and over what range of slices
+//Argsin are just the title of the image to be ROI edited
+public static roiRemoval(String imageTitle, Checkbox removeROIs) {
+
+	//Here we create a 2D arraylist to dynamically store out roiNames, 2D area, and slice area	
+	ArrayList[][] table = new ArrayList[1][3];
+	table[0][0] = new ArrayList(); // add another ArrayList object to [0,0] this is for roiNames
+	table[0][1] = new ArrayList(); // add another ArrayList object to [0,1] this is for twoDArea
+	table[0][2] = new ArrayList(); // add another ArrayList object to [0,2] this is for sliceArea
+
+	//Create variable to count how many ROIs we clear
+	int count = 1;
+
+	//Set the image we're working with to a variable
+	avg = WindowManager.getImage(imageTitle);
+		
+	//If the checkbox was true, then enter the loop for removing bits of the image
+	while (removeROIs.getState() == true) {
+			
+		//Show the avg image then ask the user for input
+		avg.show();
+		new WaitForUserDialog("ROI selection", "Draw a ROI to exclude from image if desired, and set the stack to the slice you want to start at").show();
+			
+		//Get the roi drawn as well as the number of the slice set - and get the area of the roi
+		int startSlice = avg.getSlice();
+
+		//Get the slice chosen by the user as the end and calculate difference
+		new WaitForUserDialog("ROI selection", "Set the slice where you want the ROI to end").show();
+		int endSlice = avg.getSlice();
+
+		//If the endslice is set before the start then we go back to the start of the loop and show an error message
+		if(endSlice<startSlice) {
+				
+			new WaitForUserDialog("Slice error", "End slice was set before the start slice").show();
+			
+			} else {
+
+			//Otherwise we get the roi area and slice depth
+			TestROI = avg.getRoi();
+			roiStats = TestROI.getStatistics();
+			twoDArea = roiStats.area;
+
+			sliceArea=endSlice-startSlice+1;
+				
+			//Loop through the slices from start to end, each time clearing the area within the ROI
+			IJ.log(Integer.toString(startSlice) + " " + Integer.toString(endSlice));
+			for (int clearSlice = startSlice; clearSlice <= endSlice; clearSlice++) {
+				avg.setSlice(clearSlice);
+				IJ.run(avg, "Clear", "slice");
+				//IJ.log(Integer.toString(clearSlice));
+			}
+
+			//Add our count, area, and depth to our dyanmic arrays
+			table[0][0].add(count);
+			table[0][1].add(twoDArea);
+			table[0][2].add(sliceArea);
+		
+			//IJ.log("2D Area: " + IJ.d2s(twoDArea, 9) + " Slice Area: " + Integer.toString(sliceArea) + " Pixel Width: " + IJ.d2s(pxlWidth, 9) + " Pixel Depth: " + IJ.d2s(pxlDepth, 9) + " Unit: " + unit);
+			
+			//Create a dialog to ask the user whether they want to manually remove any more ROIs - if yes we repeat the loop
+			NonBlockingGenericDialog userInputs = new NonBlockingGenericDialog("Cleaning image");
+			userInputs.addCheckbox("Do you want to manually remove another ROI from the image?", false);
+			userInputs.showDialog();
+	
+			//Get the checkbox (which returns a vector so we have to get an index of it)
+			roiChoice = userInputs.getCheckboxes();
+			removeROIs = roiChoice.get(0);
+			//test = String.valueOf(removeROIs);
+			//IJ.log(test);
+
+			//Increase the value of count by 1
+			count++;
+		}
+	}
+
+	//Display the arrays from ROI clearing
+	IJ.log("roiNamesArray contains: " + table[0][0].toString());  
+	IJ.log("twoDAreaArray contains: " + table[0][1].toString());  
+	IJ.log("sliceAreaArray contains: " + table[0][2].toString());  
+
+	//Ask the user to check the display - for debugging
+	new WaitForUserDialog("Check prints", "Check the values printed").show();
+
+	//Clear the selection of the last ROI
+	IJ.run(avg, "Select None", "");
+
+	//Return our 2D arraylist
+	return table;
+	
+}
+
+//Here we create a custom class that will allow us to return both a string and checkbox value from the autoThreshTryAll function
+public class returningValues {
+	public final String threshChoice;
+	public final Checkbox goodThresh;
+
+	public returningValues(String threshChoice, Checkbox goodThresh) {
+		this.threshChoice=threshChoice;
+		this.goodThresh=goodThresh;
+	}
+
+	//This is how we return the string value i.e. returningValues.getThreshChoice();
+	public String getThreshChoice() {
+		return this.threshChoice;
+	}
+
+	//This is how we return the checkbox value i.e. returningValues.getGoodThresh();
+	public Checkbox getGoodThresh() {
+		return this.goodThresh;
+	}
+	
+}
+
+//Function to try all the autoThresh options and get user input after making a small substack of the input image
+public static returningValues autoThreshTryAll(String imageTitle) {
+
+	//Get the image associated with the input title
+	avg = WindowManager.getImage(imageTitle);
+			
+	//Here we create a 20 slice substack of our smoothed, cleaned image, so that we can try out the auto thresholds on it
+	threshTest = new Duplicator().run(avg, 1, 5);
+	threshTest.show();
+
+	//This runs the try all action for the auto threshold method
+	IJ.run(threshTest, "Auto Threshold", "method=[Try all] white stack");
+	threshStack = WindowManager.getImage("Stack");
+
+	//These string arrays are for choosing which thresholding method to use
+	String [] threshChoice =  {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"};
+	String [] threshNames = {"Default", "Huang", "Huang2", "Intermodes", "IsoData", "Li", "MaxEntropy", "Mean", "MinError(I)", "Minimum", "Moments", "Otsu", "Percentile", "RenyiEntropy", "Shanbhag", "Triangle"};
+			
+	//Create a non-blocking dialog so the user can still check the image whilst choosing
+	NonBlockingGenericDialog userInputs = new NonBlockingGenericDialog("Auto Threshold Choice");
+	userInputs.addChoice("Which panel worked the best?", threshChoice, "1");
+	userInputs.addCheckbox("Tick if none of them are any good", false);
+			
+	userInputs.showDialog();
+	
+	//Close the stack of threshold test
+	threshStack.close();
+
+	//Get the choices from the dialog box and the associted thresholding method
+	int choice = userInputs.getNextChoiceIndex();
+	String threshSelected = threshNames[choice];
+			
+	goodThresh = userInputs.getCheckboxes();
+	goodThreshChoice = goodThresh.get(0);	
+
+	//Put these choices in the returningValues class
+	returningValues output = new returningValues(threshSelected, goodThreshChoice);
+
+	//Close the threshTest image
+	threshTest.close();
+		
+	//Return this as output
+	return output;
+			
+}
+
+//Function for manual thresholding of an image avg
+public static manualThresholding(avg) {
+
+	//Start the manual thresholding commands and wait for the user to complete it
+	IJ.setAutoThreshold(avg, "Default");
+	new WaitForUserDialog("Manual thresholding", "Manually threshold the image then proceed").show();
+	//If after thresholding the image has an inverted LUT, we flip it
+	if(avg.isInvertedLut() == true) {
+		IJ.run(avg, "Invert LUT", "");
+	}
+	//Now we check that the image foreground and background are correctly set
+	new WaitForUserDialog("Check image", "Make sure that vessels are in white on a black background, then proceed").show();
+}
+
+//Function for the entire thresholding and roi removal process of an image, avg
+public static thresholdingGrandFunction(avg) {
+
+	babyFresh=avg.duplicate();
+	
+	//Get the pixel sizes and unit of calibration of the avg image
+	pxlWidth = avg.Calibration.pixelWidth;
+	pxlDepth = avg.Calibration.pixelDepth;
+	unit = avg.Calibration.getUnit();
+	
+	//Get the area of the whole image in pixels, and it's slice number
+	wholeArea=avg.getStatistics().area;
+	totalSlices=avg.getNSlices();
+
+	//Create a dialog to ask the user whether they want to manually remove ROIs
+	NonBlockingGenericDialog userInputs = new NonBlockingGenericDialog("Cleaning image");
+	userInputs.addCheckbox("Do you want to manually remove ROIs from the image?", false);
+	userInputs.showDialog();
+	
+	//Get the checkbox (which returns a vector so we have to get an index of it)
+	roiChoice = userInputs.getCheckboxes();
+	removeROIs = roiChoice.get(0);
+	//test = String.valueOf(removeROIs);
+
+	//Here we run the roi removal on our averaged, smoothed image, and output a table with the roi details
+	ArrayList[][] roiDetails = roiRemoval(avgName, removeROIs);
+
+	//Run the autoThreshTryAll function to try out all the auto thresh techniques and see which one works best, return the choice and whether it worked
+	autoThreshOutput = autoThreshTryAll(avgName);
+
+	String threshChoice = autoThreshOutput.getThreshChoice();
+	Checkbox goodThreshChoice = autoThreshOutput.getGoodThresh(); 
+
+	//Print these values, to check
+	IJ.log(threshChoice);
+
+	if(goodThreshChoice.getState() == true) {
+		IJ.log("true");
+	} else {
+		IJ.log("false");
+	}
+
+	//If the user says the autothresholding is fine, then run it
+	if(goodThreshChoice.getState() == false) {
+		IJ.run(avg, "Auto Threshold", "method="+threshChoice+" white stack use_stack_histogram");
+	}
+
+	//If the autothresholding was bad..
+	while(goodThreshChoice.getState() == true) {
+
+		//Ask the user to choose between these choices
+		String [] choiceArray = {"Start from the beginning - remove all ROI clearances and thresholding","Remove more ROIs", "Manually threshold the ROI cleared image", "Try a different automated thresholding technique"};
+			
+		NonBlockingGenericDialog userInputs = new NonBlockingGenericDialog("Thresholding satisfactory");
+		userInputs.addChoice("Watchu wanna do 'bout it?", choiceArray, "Start from the beginning - remove all ROI clearances and thresholding");
+		userInputs.showDialog();
+
+		int choice = userInputs.getNextChoiceIndex();
+
+		if(choice == 3) {
+
+			backup = avg.duplicate();
+			autoThreshFinal = autoThreshTryAll(avgName);
+			String threshChoiceLoop = autoThreshFinal.getThreshChoice();
+			Checkbox goodThreshChoiceLoop = autoThreshFinal.getGoodThresh();
+
+			if(goodThreshChoiceLoop.getState() == false) {
+				goodThreshChoice.setState(true);
+			} else {
+				avg.close();
+				backup.setTitle(avgTitle);
+				avg=backup;
+			}
+		}
+			
+		if(choice == 2) {
+
+			backup = avg.duplicate();
+			
+			manualThresholding(avg);
+			
+			NonBlockingGenericDialog manualThresholdingBox = new NonBlockingGenericDialog("Manual Thresholding");
+			manualThresholdingBox.addCheckbox("Happy with the manual threshold?", false);
+			manualThresholdingBox.showDialog();
+
+			manualCheckbox = manualThresholdingBox.getCheckboxes();
+			manualHappy = manualCheckbox.get(0);
+
+			if(manualHappy.getState() == true) {				
+				threshHappy.setState(true);	
+				} else {
+					avg.close();
+					backup.setTitle(avgTitle);
+					avg=backup;
+				}
+			}
+			
+		if(choice == 1) {
+
+			backup = roiFresh.duplicate();
+				
+			NonBlockingGenericDialog test = new NonBlockingGenericDialog("Test");
+			test.addCheckbox("Test", true);
+			testOut1=test.getCheckboxes();
+			testOut=testOut1.get(0);
+			testOut.setState(true);
+				
+			ArrayList[][] roiDetailsMore = roiRemoval(name, testOut);	
+	
+			roiDetails[0][0].addAll(roiDetailsMore[0][0]);
+			roiDetails[0][1].addAll(roiDetailsMore[0][1]);
+			roiDetails[0][2].addAll(roiDetailsMore[0][2]);
+
+			NonBlockingGenericDialog roiRemovalRedo = new NonBlockingGenericDialog("Manual Thresholding");
+			roiRemovalRedo.addCheckbox("Happy with the ROI removal?", false);
+			roiRemovalRedo.showDialog();
+
+			roiRemovalIndex = roiRemovalRedo.getCheckboxes();
+			roiRemovalHappy = roiRemovalIndex.get(0);
+
+			if(roiRemovalHappy.getState() == true) {				
+				backup.close();
+				} else {
+					avg.close();
+					backup.setTitle(avgTitle);
+					avg=backup;
+				}
+				
+			}
+
+		if(choice == 0) {	
+
+			backup=babyFresh;
+				
+			thresholdingGrandFunction(backup);
+
+			NonBlockingGenericDialog freshStart = new NonBlockingGenericDialog("Fresh go");
+			freshStart.addCheckbox("Happy with the big re-do?", false);
+			freshStart.showDialog();
+
+			freshStartValues = freshStart.getCheckboxes();
+			freshStart = manualCheckbox.get(0);
+
+			if(threshHappy.getState() == true) {				
+				avg.close();
+				backup.setTitle(avgTitle);
+				avg=backup;
+				threshHappy.setState(true);		
+			} else {
+				backup.close();
+			}
+					
+		}
+
+	}
+
+	return roiDetails;
+	
+}
+
+//Example inputs for the function (called a method in java?)
+String dir = "E:/Dropbox (Brain Energy Lab)/Everything/2P data/Devin/";
+//String dir = "/Users/Devin/Downloads";
+String toFind = "WideFOV";
+
+//Declare the arrraylist to fill outside the function
+ArrayList fileLocations = new ArrayList();
+
+//Here we return the output of the method into a file array
+System.out.println("Start");
+File [] output = listFilesAndFilesSubDirectories(dir, toFind, fileLocations);
+System.out.println("End");
+
+//Here we create a dialog box for user input
+//choiceArray is a list of channels the user can select
+//channelNames are the associated substrings with those channels
+String [] choiceArray =  {"1", "2", "3", "4"};
+String [] channelNames = {"ch_1", "ch_2", "ch_3", "ch_4"};
+
+GenericDialog userInputs = new GenericDialog("User Inputs");
+userInputs.addNumericField("Number of frames per plane: ", 0, 0);
+userInputs.addChoice("Which channel to use", choiceArray, "2");
+userInputs.showDialog();
+
+//Retrive the choices as integers, or as a string in the case of channel
+int choice = userInputs.getNextChoiceIndex();
+int FperZ = userInputs.getNextNumber();
+String channel = channelNames[choice];
+
+//Here we go through our list of file locations and open ones that include ch_2 (i.e. they are TexasRed) if selected channel is 2
+for (File file:output) {
+	if(file.getAbsolutePath().contains(channel)) {
+		imp=IJ.openImage(file.getAbsolutePath());
+		String name = imp.getTitle();
+		
+		//imp.show();
+		//String [] test = WindowManager.getImageTitles();
+		//System.out.println(test[0]);
+		//System.out.println(name);
+		//here = WindowManager.getImage(name);
+		//System.exit();	
+		
+		//Here we register the open image then grouped z project it according to the user input of how many frames per Z were taken
+		//IJ.run(imp, "MultiStackReg", ""+name+" action_1=Align file_1=[] stack_2=None action_2=Ignore file_2=[] transformation=Translation");
+		IJ.run(imp, "Grouped Z Project...", "projection=[Average Intensity] group="+FperZ+"");
+		
+		//Here we get the averaged image and set it as avg
+		String avgName = "AVG_"+name;
+		avg = WindowManager.getImage(avgName);
+		
+		//Turn avg into an 8 bit image and median smooth it
+		IJ.run(avg, "8-bit", "");
+		IJ.run(avg, "Median 3D...", "x=2 y=2 z=2");
+
+		ArrayList[][] roiDetails = thresholdingGrandFunction(avg);
+			
+		IJ.run(avg, "Skeletonize (2D/3D)", "");
+		avg.show();
+		//IJ.run(avgNameSmooth, "Analyze Skeleton (2D/3D)", "prune=[lowest intensity voxel] show display original_image="+dupName+"");
+		IJ.run(avg, "Analyze Skeleton (2D/3D)", "prune=[shortest branch] show display");
+		
+		//test.close();
+
+		tifIndex = dupName.indexOf(".tif");
+		String skeletonName = dupName.substring(0, tifIndex) + "-labeled-skeletons";
+		skelWindow = WindowManager.getImage(skeletonName);
+		//skelWindow.close();
+
+		//String [] test = WindowManager.getImageTitles();
+		//System.out.println(skeletonName);
+		//System.out.println(test[0]);
+		//System.out.println(test[1]);
+		//System.out.println(test[2]);
+		//System.out.println(test[3]);
+		//System.out.println(test[4]);
+		
+		System.exit();	
+		}
+}

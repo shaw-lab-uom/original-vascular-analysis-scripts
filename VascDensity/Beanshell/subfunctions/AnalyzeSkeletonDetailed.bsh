@@ -1,0 +1,76 @@
+// @ImagePlus(label="Skeleton image", description="Binary image skeletonized with Skeletonize3D") image
+ 
+import sc.fiji.analyzeSkeleton.AnalyzeSkeleton_;
+import sc.fiji.analyzeSkeleton.Edge;
+import sc.fiji.analyzeSkeleton.Vertex;
+import sc.fiji.analyzeSkeleton.Point;
+import ij.IJ;
+import ij.gui.*; 
+import ij.plugin.PlugIn;
+import ij.text.*;
+
+// analyze skeleton
+skel = new AnalyzeSkeleton_();
+skel.setup("", image);
+skelResult = skel.run(AnalyzeSkeleton_.NONE, false, false, null, true, false);
+ 
+// get calibration
+pixelWidth = image.getCalibration().pixelWidth;
+pixelHeight = image.getCalibration().pixelHeight;
+pixelDepth = image.getCalibration().pixelDepth;
+ 
+// get graphs (one per skeleton in the image)
+graph = skelResult.getGraph();
+IJ.log("Number of branches " + graph.length);
+
+//output = new WaitForUserDialog("here", "test");
+//output.show();
+
+// go through all skeletons
+for( i = 0 ; i < graph.length; i++ )
+{
+IJ.log( "Skeleton " + (i+1) );
+    listEdges = graph[i].getEdges();
+	test = Arrays.toString(listEdges.toArray());
+	IJ.log("Edges " + test);
+	IJ.log("Size " + listEdges.size());
+	//here = new TextWindow("thingy", test, 500, 500);
+	//here.show();
+	//huh = new WaitForUserDialog("here", "test");
+	//huh.show();
+    
+    if( listEdges.size() > 0 )
+{
+	IJ.log( "Skeleton " + (i+1) );
+}
+
+    // go through all branches and display
+    // position in the log window
+    j=0;
+    for( Edge e : listEdges )
+    {
+    	IJ.log( "Branch " + j);
+ 
+    	p1 = e.getV1().getPoints();
+    	huh = Arrays.toString(p1.toArray());
+    	//IJ.log( "  Initial point : "
+    	IJ.log(huh);
+    	IJ.log(
+    			( p1.x * pixelDepth + 1) + " "
+  				+ ( p1.y * pixelHeight + 1) + " "
+  				+ ( p1.z * pixelDepth + 1) );	
+  			System.exit();
+        for( Point p : e.getSlabs() )
+        //Middle points
+  			IJ.log(
+  				( p.x * pixelDepth + 1) + " " +  
+  				( p.y * pixelHeight + 1) + " " + 
+  				( p.z * pixelDepth + 1) );
+        p2 = e.getV2().getPoints().get( 0 );
+        //IJ.log( "  Final point : "
+    	IJ.log( ( p2.x * pixelDepth + 1) + " " +  
+  				( p2.y * pixelHeight + 1) + " " +  
+  				( p2.z * pixelDepth + 1) ); 
+     	j++;    
+    }
+}

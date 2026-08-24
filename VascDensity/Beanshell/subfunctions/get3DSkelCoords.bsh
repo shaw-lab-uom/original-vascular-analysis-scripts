@@ -1,0 +1,73 @@
+// @ImagePlus(label="Skeleton image", description="Binary image skeletonized with Skeletonize3D") image
+ 
+import sc.fiji.analyzeSkeleton.AnalyzeSkeleton_;
+import sc.fiji.analyzeSkeleton.Edge;
+import sc.fiji.analyzeSkeleton.Vertex;
+import sc.fiji.analyzeSkeleton.Point;
+import ij.IJ;
+ 
+// analyze skeleton
+skel = new AnalyzeSkeleton_();
+skel.setup("", image);
+skelResult = skel.run(AnalyzeSkeleton_.NONE, false, false, null, true, false);
+ 
+// get calibration
+pixelWidth = image.getCalibration().pixelWidth;
+pixelHeight = image.getCalibration().pixelHeight;
+pixelDepth = image.getCalibration().pixelDepth;
+ 
+// get graphs (one per skeleton in the image)
+graph = skelResult.getGraph();
+
+// go through all skeletons
+for( i = 0 ; i < graph.length; i++ )
+{
+//IJ.log( " Skeleton " + (i+1) );
+    listEdges = graph[i].getEdges();
+    
+    if( listEdges.size() > 0 )
+{
+	IJ.log( " Skeleton " + (i+1) );
+}
+
+//commented out as dont care for branches with no data:
+ 	//if( listEdges.size() == 0 )
+ 	//{
+ 		//IJ.log( "No branches found" );
+ 		//vertices = graph[i].getVertices();
+ 		//for( Vertex v : vertices )
+ 		//{
+ 			//p1 = v.getPoints().get( 0 );
+    		//IJ.log( "  Point : "
+    		//	+ ( p1.x * pixelDepth ) + ", "
+  			//	+ ( p1.y * pixelHeight ) + ", "
+  			//	+ ( p1.z * pixelDepth ) );	
+ 		//}
+ 	//}
+ 	
+    // go through all branches and display
+    // position in the log window
+    j=0;
+    for( Edge e : listEdges )
+    {
+    	IJ.log( "Branch " + j + ":" );
+    	p1 = e.getV1().getPoints().get( 0 );
+    	//IJ.log( "  Initial point : "
+    	IJ.log(
+    			+ ( p1.x * pixelDepth ) + ", "
+  				+ ( p1.y * pixelHeight ) + ", "
+  				+ ( p1.z * pixelDepth ) );			
+        for( Point p : e.getSlabs() )
+        //Middle points
+  			IJ.log("  " +
+  				( p.x * pixelDepth ) + ", " +
+  				( p.y * pixelHeight ) + ", " +
+  				( p.z * pixelDepth ) );
+        p2 = e.getV2().getPoints().get( 0 );
+        //IJ.log( "  Final point : "
+    	IJ.log( ( p2.x * pixelDepth ) + ", " +
+  				( p2.y * pixelHeight ) + ", " +
+  				( p2.z * pixelDepth ) ); 
+     	j++;    
+    }
+}
