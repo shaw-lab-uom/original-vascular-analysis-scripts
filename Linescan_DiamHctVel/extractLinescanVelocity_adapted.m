@@ -9,6 +9,12 @@ function extractLinescanVelocity_adapted(fname, prefs)
 % Key changes from original:
 %   - BUG FIX: deltax now correctly applies pxsz when pxFlag=0, so
 %     velocities have correct physical units (mm/s) in all code paths.
+%   - BUG FIX (~10x-out issue): the apparent-velocity line was using deltax
+%     (the line's TOTAL physical length) and deltat/spw (the WHOLE
+%     WINDOW's duration) instead of the per-pixel spatial size and
+%     per-line time that cot(theta) actually needs to be scaled by - see
+%     the comment at the vel_signed line for the full derivation and how
+%     this was confirmed.
 %   - BUG FIX: smoothKnit prefs field name corrected (see smoothKnit.m).
 %   - Robust percentile normalisation replaces global min-max, so a single
 %     bright artefact no longer compresses the whole dynamic range.
@@ -421,12 +427,26 @@ for a = 1:size(find_tif_file, 2)
 
     % VELOCITY CALCULATION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Step 1: apparent velocity from Drew et al. (2010) Eq. 4.
-    %   V_app = (deltax / deltat) * cot(theta)
-    % deltax: total physical length of the linescan line in mm.
-    %   sum(linePxs) is always in um (bug fix above ensures this).
-    deltax = sum(linePxs) / 1000; % mm
+    %   V_app = (per-pixel spatial size / per-line time) * cot(theta)
+    %
+    % BUG FIX (Aug 2026, ~10x-out issue): theta/cot(theta) from the Radon
+    % transform is a PIXEL-INDEX ratio (rows-per-column WITHIN one sliding
+    % window), so converting it to a physical velocity needs the PER-PIXEL
+    % spatial size and PER-LINE time - not deltax (the line's TOTAL
+    % physical length) and not deltat/spw (the WHOLE WINDOW's duration),
+    % which is what this line was using. The two errors partially cancelled
+    % (net factor = width/windowsize, not the full line-width factor a
+    % pure deltax-only version of this bug would give), which is
+    % consistent with a ~10x discrepancy rather than a much larger one.
+    % Confirmed via a synthetic streak of known true velocity, run through
+    % this exact Radon pipeline (same validation used for MAPS.m's
+    % linescan mode, which has an equivalent - single-error - version of
+    % this bug). deltax is still used correctly below for Vscan (a genuine
+    % whole-line rate); only this apparent-velocity line was wrong.
+    deltax  = sum(linePxs) / 1000;   % mm - total line length, used for Vscan below
+    pxsz_mm = pxsz / 1000;           % mm - per-pixel spatial size, used here instead
 
-    vel_signed = (deltax / deltat) * cot(deg2rad(thetasz32));
+    vel_signed = (pxsz_mm / (mspline/1000)) * cot(deg2rad(thetasz32));
 
     % Step 2: AUTO-DETECT SCAN DIRECTION FROM STREAK SLANT %%%%%%%%%%%%%%%%
     % The sign of the raw (signed) velocity encodes the relationship between
